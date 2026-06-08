@@ -82,14 +82,10 @@ id | article_id | result
 3. 双击 `start.bat` 启动系统
 4. 浏览器自动打开，按提示填入API Key即可使用
 
-**Mac/Linux用户**：
-1. 从 [Releases](../../releases) 下载对应版本
-2. 解压后运行 `bash start.sh`
-3. 浏览器自动打开，按提示填入API Key即可使用
 
 ### 📋 系统要求（一键版）
 
-- Windows 7+ / Mac OS 10.14+ / Linux (Ubuntu 18.04+)
+- Windows 7+ 
 - **不需要安装Python**
 - 网络连接（用于爬虫和AI分析）
 
@@ -101,7 +97,7 @@ id | article_id | result
 
 ### 系统要求（源码版）
 
-- **操作系统**：Windows/Mac/Linux
+- **操作系统**：Windows
 - **Python**：3.8+
 - **网络**：需要访问人民网和DeepSeek API
 
