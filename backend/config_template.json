@@ -1,0 +1,23 @@
+{
+  "host": "127.0.0.1",
+  "port": 8000,
+  "db_path": "app.db",
+  "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "crawl_sources": [
+    "http://opinion.people.com.cn/GB/436867/index.html",
+    "http://opinion.people.com.cn/GB/8213/49160/49219/index.html"
+  ],
+  "review_days": [
+    1,
+    2,
+    4,
+    7,
+    15
+  ],
+  "cors_origins": [
+    "*"
+  ],
+  "timeout": 10,
+  "deepseek_api_url": "https://api.deepseek.com/v1/chat/completions",
+  "deepseek_model": "deepseek-chat"
+}

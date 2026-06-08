@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <title>AI评论训练系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .highlight-problem {
+            background-color: #ffcccc;
+        }
+
+        .highlight-cause {
+            background-color: #fff3cd;
+        }
+
+        .highlight-solution {
+            background-color: #d4edda;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto bg-white shadow-lg rounded-lg p-6">
+        <h1 class="text-3xl font-bold text-blue-600 mb-6 text-center">🧠 AI 评论深度训练系统</h1>
+
+        <!-- 设置区 -->
+        <div class="flex gap-4 mb-6">
+            <input id="apiKey" type="password" class="flex-1 border p-2 rounded" placeholder="在此输入你的 DeepSeek API Key">
+            <button onclick="saveKey()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600" title="保存到浏览器（离线工作）">💾 保存秘钥</button>
+            <button onclick="clearKey()" class="bg-gray-400 text-white px-4 py-2 rounded hover:bg-gray-500" title="清除已保存的秘钥">🗑️ 清除</button>
+        </div>
+        <div class="text-sm text-gray-500 mb-6">
+            💡 提示：秘钥保存在你的浏览器本地，刷新页面后会自动填充。清空浏览器数据会导致秘钥丢失。
+        </div>
+
+        <div class="flex gap-4 mb-8">
+            <button onclick="fetchArticle()"
+                class="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600 font-bold">获取今日文章</button>
+            <div id="loading" class="hidden text-gray-500 animate-pulse">正在抓取文章...</div>
+        </div>
+
+        <hr class="mb-8">
+
+        <!-- 文章展示区 -->
+        <div id="noteBox" class="hidden mt-6 bg-white p-4 border rounded shadow-md">
+            <h4 class="font-bold text-gray-700 mb-2 font-lg">📌 我的标注与笔记回顾</h4>
+            <div id="noteArea"></div>
+        </div>
+        <div id="articleArea" class="hidden">
+            <h2 id="articleTitle" class="text-2xl font-bold mb-4 text-gray-800"></h2>
+            <div id="articleContent"
+                class="text-lg leading-relaxed text-gray-700 whitespace-pre-line p-4 border rounded bg-gray-50 mb-4">
+            </div>
+
+            <div class="sticky bottom-4 bg-white p-4 shadow-inner border-t flex gap-4 justify-center">
+                <button onclick="highlight('problem')" class="bg-red-100 border border-red-400 px-4 py-2 rounded">🔴
+                    标记问题</button>
+                <button onclick="highlight('cause')" class="bg-yellow-100 border border-yellow-400 px-4 py-2 rounded">🟡
+                    标记原因</button>
+                <button onclick="highlight('solution')"
+                    class="bg-green-100 border border-green-400 px-4 py-2 rounded">🟢 标记对策</button>
+                <button onclick="analyze()"
+                    class="bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700 font-bold">AI
+                    深度分析</button>
+            </div>
+        </div>
+
+        <!-- 分析结果 -->
+        <div id="analysisArea" class="mt-8 hidden">
+            <h3 class="text-xl font-bold mb-4 text-purple-700">🤖 AI 结构化分析结果：</h3>
+            <div id="analysisContent" class="bg-purple-50 p-6 rounded-lg border border-purple-200"></div>
+        </div>
+    </div>
+    <!-- 历史记录区 -->
+    <div class="mt-12">
+        <h3 class="text-xl font-bold mb-4 text-gray-600 border-b pb-2">📂 历史练习记录</h3>
+        <div id="historyList" class="grid gap-2">
+            <!-- 这里会由 JS 动态填充 -->
+        </div>
+    </div>
+
+    <script>
+        // 1. 顶部：定义全局变量（抽屉）
+        let currentArticleId = null;
+
+        // 2. 核心：页面一打开就执行的动作
+        window.onload = function () {
+            loadHistory(); // 自动加载左侧或下方的历史列表
+            loadKey(); // 自动加载保存的API Key
+        };
+
+        // 3. 功能函数：加载保存的API Key
+        function loadKey() {
+            const savedKey = localStorage.getItem("apiKey");
+            if (savedKey) {
+                document.getElementById('apiKey').value = savedKey;
+            }
+        }
+
+        // 4. 功能函数：保存秘钥
+        function saveKey() {
+            const apiKeyInput = document.getElementById('apiKey').value.trim();
+            if (!apiKeyInput) {
+                alert("⚠️  API Key不能为空！");
+                return;
+            }
+            localStorage.setItem("apiKey", apiKeyInput);
+            alert("✅ 秘钥已保存！下次访问时会自动加载。");
+        }
+
+        // 5. 功能函数：清除保存的API Key
+        function clearKey() {
+            if (confirm("确定要清除已保存的API Key吗？")) {
+                localStorage.removeItem("apiKey");
+                document.getElementById('apiKey').value = "";
+                alert("✅ 已清除保存的API Key");
+            }
+        }
+        //功能函数：在加载文章后，遍历所有保存的标记
+        function applyHighlights(content, highlights) {
+            let html = content;
+            const colors = { problem: "#ffcccc", cause: "#fff3cd", solution: "#d4edda" };
+
+            // 为了防止多次替换导致 HTML 标签乱套，我们按文字长度从长到短排序
+            highlights.sort((a, b) => b.text.length - a.text.length);
+
+            highlights.forEach(h => {
+                // 使用正则替换，增加 title 属性实现悬停显示批注
+                const color = colors[h.type];
+                const noteTitle = h.note ? `批注: ${h.note}` : "无批注";
+
+                // 注意：这里是一个简单的文本替换。如果文章中有两处一模一样的文字，都会变色。
+                const escapedText = h.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // 防止特殊字符报错
+                const reg = new RegExp(escapedText, 'g');
+
+                html = html.replace(reg, `<span style="background-color: ${color}" title="${noteTitle}">${h.text}</span>`);
+            });
+            return html;
+        }
+
+        // 4. 功能函数：获取历史列表
+        async function loadHistory() {
+            try {
+                const res = await fetch("http://localhost:8000/api/articles");
+                const list = await res.json();
+                const container = document.getElementById('historyList');
+                if (list.length === 0) {
+                    container.innerHTML = '<p class="text-gray-400">暂无历史记录</p>';
+                    return;
+                }
+                container.innerHTML = list.map(item => `
+                <div class="group p-3 bg-white border rounded hover:bg-blue-50 transition flex justify-between items-center shadow-sm">
+        <div onclick="loadArticle(${item.id})" class="cursor-pointer flex-1">
+            <span class="font-medium text-blue-700">📄 ${item.title}</span>
+            <span class="text-gray-400 text-xs ml-2">${item.date}</span>
+        </div>
+        <button onclick="deleteArticle(${item.id})" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 p-1">🗑️删除</button>
+    </div>
+`).join('');
+            } catch (e) {
+                console.error("加载历史失败", e);
+            }
+        }
+        //增加删除函数和批注
+        async function deleteArticle(id) {
+            if (!confirm("确定要删除这篇文章及所有笔记吗？")) return;
+            await fetch(`http://localhost:8000/api/article/${id}`, { method: 'DELETE' });
+            loadHistory(); // 刷新列表
+            if (currentArticleId === id) document.getElementById('articleArea').classList.add('hidden');
+        }
+
+        // 替换 index.html 中所有的 loadArticle 函数
+        async function loadArticle(id) {
+            try {
+                const res = await fetch(`http://localhost:8000/api/article/${id}`);
+                const data = await res.json();
+                currentArticleId = id;
+
+                // 1. 还原标题
+                document.getElementById('articleTitle').innerText = data.title;
+
+                // 2. 核心：通过 applyHighlights 还原高亮和悬停批注
+                const highlightedHtml = applyHighlights(data.content, data.highlights);
+                document.getElementById('articleContent').innerHTML = highlightedHtml;
+
+                // 3. 还原 AI 分析结果
+                const analysisArea = document.getElementById('analysisArea');
+                const analysisContent = document.getElementById('analysisContent');
+
+                if (data.ai_analysis) {
+                    const aiData = JSON.parse(data.ai_analysis);
+                    analysisArea.classList.remove('hidden');
+                    analysisContent.innerHTML = `
+                <div class="space-y-3 mt-2 bg-blue-50 p-4 rounded border border-blue-100">
+                    <p><b class="text-red-600">🚩 核心问题：</b> ${aiData.problems.join('、') || '暂无'}</p>
+                    <p><b class="text-yellow-600">🔍 深度原因：</b> ${aiData.causes.join('、') || '暂无'}</p>
+                    <p><b class="text-green-600">💡 应对对策：</b> ${aiData.solutions.join('、') || '暂无'}</p>
+                </div>
+            `;
+                } else {
+                    analysisArea.classList.add('hidden');
+                }
+
+                // 4. 显示文章区域并滚动到顶
+                document.getElementById('articleArea').classList.remove('hidden');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            } catch (e) {
+                console.error("加载文章失败:", e);
+                alert("文章加载失败，请检查后端运行状态。");
+            }
+        }
+
+        async function fetchArticle() {
+            document.getElementById('loading').classList.remove('hidden');
+            try {
+                const res = await fetch("http://localhost:8000/api/fetch");
+                const data = await res.json();
+                currentArticleId = data.id;
+                document.getElementById('articleTitle').innerText = data.title;
+                document.getElementById('articleContent').innerText = data.content;
+                document.getElementById('articleArea').classList.remove('hidden');
+                // 它的作用是：当后端抓完新文章存进数据库后，立刻通知前端刷新下方的历史列表
+                await loadHistory();
+            } catch (e) {
+                alert("抓取失败，请检查后端是否启动");
+            }
+            document.getElementById('loading').classList.add('hidden');
+        }
+
+        async function highlight(type) {
+            const selection = window.getSelection();
+            const text = selection.toString().trim();
+            if (!text) return;
+
+            // 弹出输入框获取批注
+            const note = prompt(`为这段${type}添加批注（可选）：`, "");
+
+            // 前端即时变色
+            const range = selection.getRangeAt(0);
+            const span = document.createElement("span");
+            const colors = { problem: "#ffcccc", cause: "#fff3cd", solution: "#d4edda" };
+            span.style.backgroundColor = colors[type];
+            span.title = note ? `批注: ${note}` : "无批注"; // 悬停显示
+            span.textContent = text;
+
+            range.deleteContents();
+            range.insertNode(span);
+
+            // 保存到后端
+            await fetch("http://localhost:8000/api/highlight", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    article_id: currentArticleId,
+                    text: text,
+                    type: type,
+                    note: note || ""
+                })
+            });
+
+            selection.removeAllRanges();
+        }
+        async function analyze() {
+            // 获取当前文章的纯文本内容
+            const content = document.getElementById('articleContent').innerText;
+
+            // 如果你网页上有填秘钥的框，从那里拿；如果没有或者没填，就传空字符串让后端用默认的
+            const apiKeyInput = document.getElementById('apiKey');
+            const apiKey = apiKeyInput ? apiKeyInput.value : "";
+
+            // 1. 让网页显示“加载中”的提示，防止你以为死机了
+            const analysisArea = document.getElementById('analysisArea');
+            const analysisContent = document.getElementById('analysisContent');
+            analysisArea.classList.remove('hidden');
+            analysisContent.innerHTML = "<p class='text-blue-500 animate-pulse'>🤖 AI 专家正在深度阅读并拆解文章，大约需要 10~20 秒，请稍候...</p>";
+
+            try {
+                // 2. 向后端发送请求
+                const res = await fetch("http://localhost:8000/api/analyze", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        article_id: currentArticleId,  // 🌟 解决 422 报错的核心：告诉后端文章 ID
+                        content: content,
+                        api_key: apiKey
+                    })
+                });
+
+                const data = await res.json();
+
+                // 3. 渲染 AI 返回的结果
+                if (data.status === "success") {
+                    const aiData = JSON.parse(data.data);
+                    analysisContent.innerHTML = `
+                <div class="space-y-3 mt-2 bg-blue-50 p-4 rounded border border-blue-100">
+                    <p><b class="text-red-600">🚩 核心问题：</b> ${aiData.problems.join('、') || '暂无'}</p>
+                    <p><b class="text-yellow-600">🔍 深度原因：</b> ${aiData.causes.join('、') || '暂无'}</p>
+                    <p><b class="text-green-600">💡 应对对策：</b> ${aiData.solutions.join('、') || '暂无'}</p>
+                </div>
+            `;
+                } else {
+                    // 如果 API 没钱了或者报错，显示红色错误信息
+                    analysisContent.innerHTML = `<p class="text-red-500 font-bold">❌ 分析出错：${data.message}</p>`;
+                }
+            } catch (e) {
+                analysisContent.innerHTML = `<p class="text-red-500 font-bold">❌ 网络请求失败，请检查黑窗口是否在运行。</p>`;
+            }
+        }
+    </script>
+</body>
+
+</html>
